@@ -1,0 +1,40 @@
+<Window x:Class="Spellbook.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Spellbook" Width="1120" Height="720" MinWidth="900" MinHeight="600" Background="{StaticResource Ink}" Foreground="{StaticResource Text}" FontFamily="Georgia" WindowStartupLocation="CenterScreen">
+  <Grid Margin="28">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="24"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border Grid.ColumnSpan="3" Background="#201609" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="22,16">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <Border Width="46" Height="46" Background="#2B1D0B" BorderBrush="{StaticResource Violet}" BorderThickness="1" CornerRadius="9"><Image Source="/Assets/spellbook-logo.png" Stretch="Uniform" Margin="3"/></Border>
+        <StackPanel Grid.Column="2"><TextBlock Text="S P E L L B O O K" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Gold}"/><TextBlock Text="AUTOMAÇÕES LOCAIS · MOUSE E TECLADO" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
+        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"><Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="#6EE0A8"/><TextBlock x:Name="StatusText" Text="PRONTO" Foreground="{StaticResource Muted}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center"/></StackPanel>
+      </Grid>
+    </Border>
+    <Border Grid.Row="2" Grid.Column="0" Background="#201609" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="16">
+      <DockPanel>
+        <Button DockPanel.Dock="Bottom" Click="NewSpell_Click" Content="＋  NOVO FEITIÇO" Background="{StaticResource Violet}" BorderBrush="{StaticResource Violet}" Margin="0,14,0,0"/>
+        <StackPanel><TextBlock Text="G R I M Ó R I O" FontSize="12" Foreground="{StaticResource Gold}" FontWeight="Bold" Margin="4,0,0,10"/>
+          <ListBox x:Name="SpellsList" SelectionChanged="SpellsList_SelectionChanged" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Text}" DisplayMemberPath="Name"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <Border Grid.Row="2" Grid.Column="2" Background="#201609" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="28">
+      <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+        <TextBlock Text="C O N J U R A R  U M A  A Ç Ã O" Foreground="{StaticResource Gold}" FontSize="12" FontWeight="Bold"/>
+        <TextBox x:Name="NameBox" TextChanged="NameBox_TextChanged" Background="Transparent" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Line}" Foreground="{StaticResource Text}" FontFamily="Georgia" FontSize="28" Padding="0,12,0,10"/>
+        <Grid Margin="0,22,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="160"/><ColumnDefinition Width="18"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Text="ATALHO (informativo)" Foreground="{StaticResource Muted}" FontSize="11"/><TextBox x:Name="HotkeyBox" TextChanged="DetailsChanged" Background="#2B1D0B" BorderBrush="{StaticResource Line}" Foreground="{StaticResource Text}" Padding="10,8" Margin="0,6,0,0"/></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Text="REPETIÇÕES" Foreground="{StaticResource Muted}" FontSize="11"/><TextBox x:Name="RepeatBox" Text="1" TextChanged="DetailsChanged" Background="#2B1D0B" BorderBrush="{StaticResource Line}" Foreground="{StaticResource Text}" Padding="10,8" Margin="0,6,0,0"/></StackPanel>
+          <StackPanel Grid.Column="4"><TextBlock Text="DURAÇÃO" Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock x:Name="DurationText" Text="0s" Foreground="{StaticResource Gold}" FontSize="18" Margin="0,8,0,0"/></StackPanel>
+        </Grid>
+        <Border Background="#170F08" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="9" Padding="18" Margin="0,28,0,0"><StackPanel>
+          <TextBlock Text="C Í R C U L O  D E  G R A V A Ç Ã O" Foreground="{StaticResource Gold}" FontSize="12" FontWeight="Bold"/>
+          <TextBlock Text="Clique em gravar e execute a sequência fora desta janela. Pare ao retornar. Movimentos do mouse são registrados para manter a precisão." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,15"/>
+          <StackPanel Orientation="Horizontal"><Button x:Name="RecordButton" Click="RecordButton_Click" Content="●  GRAVAR" Background="#6D28D9" BorderBrush="#8B5CF6"/><Button Click="PlayButton_Click" Content="▶  TESTAR" Margin="10,0,0,0"/><Button Click="ClearButton_Click" Content="LIMPAR SEQUÊNCIA" Margin="10,0,0,0"/></StackPanel>
+        </StackPanel></Border>
+        <TextBlock Text="S E Q U Ê N C I A  R E G I S T R A D A" Foreground="{StaticResource Gold}" FontSize="12" FontWeight="Bold" Margin="0,28,0,10"/>
+        <ListBox x:Name="EventsList" Height="130" Background="#170F08" BorderBrush="{StaticResource Line}" Foreground="{StaticResource Muted}"/>
+      </StackPanel></ScrollViewer>
+    </Border>
+    <Border Grid.Row="3" Grid.ColumnSpan="3" Margin="0,20,0,0" Padding="8,0" Background="Transparent"><DockPanel><TextBlock Text="Seus feitiços são salvos apenas neste computador." Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock x:Name="SaveText" DockPanel.Dock="Right" Text="SALVO" Foreground="{StaticResource Gold}" FontSize="11"/></DockPanel></Border>
+  </Grid>
+</Window>
