@@ -44,8 +44,9 @@
         </StackPanel></Border>
         <Border x:Name="RecordingPanel" Background="#170F08" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="9" Padding="18" Margin="0,28,0,0"><StackPanel>
           <TextBlock Text="C Í R C U L O  D E  G R A V A Ç Ã O" Foreground="{StaticResource Gold}" FontSize="12" FontWeight="Bold"/>
-          <TextBlock Text="Clique em gravar e execute a sequência fora desta janela. Pare ao retornar. Movimentos do mouse são registrados para manter a precisão." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,15"/>
-          <Button x:Name="RecordButton" Style="{StaticResource PrimaryButton}" Click="RecordButton_Click" Content="●  GRAVAR" HorizontalAlignment="Left"/>
+          <TextBlock Text="Ao iniciar, o Spellbook se minimiza automaticamente. Execute a sequência e pressione a tecla configurada abaixo para parar a gravação e trazer o app de volta." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,15"/>
+          <StackPanel Width="230" Margin="0,0,0,14"><TextBlock Text="TECLA PARA PARAR GRAVAÇÃO" Foreground="{StaticResource Muted}" FontSize="11"/><TextBox x:Name="RecordingStopBox" IsReadOnly="True" PreviewMouseLeftButtonDown="RecordingStopBox_PreviewMouseLeftButtonDown" ToolTip="Clique aqui e pressione a tecla ou combinação desejada" Background="#2B1D0B" BorderBrush="{StaticResource Line}" Foreground="{StaticResource Text}" CaretBrush="Transparent" Padding="10,8" Margin="0,6,0,0"/></StackPanel>
+          <Button x:Name="RecordButton" Style="{StaticResource PrimaryButton}" Click="RecordButton_Click" Content="●  GRAVAR · F8 PARA PARAR" HorizontalAlignment="Left"/>
         </StackPanel></Border>
         <WrapPanel Margin="0,14,0,0"><Button x:Name="PlayButton" Click="PlayButton_Click" Content="▷  TESTAR FEITIÇO"/><Button Style="{StaticResource DangerButton}" Click="ClearButton_Click" Content="⌫  LIMPAR" Margin="10,0,0,0"/></WrapPanel>
         <TextBlock Text="S E Q U Ê N C I A  R E G I S T R A D A" Foreground="{StaticResource Gold}" FontSize="12" FontWeight="Bold" Margin="0,28,0,10"/>

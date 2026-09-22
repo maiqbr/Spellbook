@@ -35,3 +35,8 @@ public sealed class AutoClickerSettings
     public int X { get; set; }
     public int Y { get; set; }
 }
+public sealed class SpellbookSettings
+{
+    public int RecordingStopVirtualKey { get; set; } = 0x77;
+    public uint RecordingStopModifiers { get; set; }
+}

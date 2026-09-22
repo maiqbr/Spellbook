@@ -14,8 +14,11 @@ public sealed class MacroEngine : IDisposable
     public List<MacroEvent> Recording { get; } = [];
     public event Action<MacroEvent>? EventRecorded;
     public event Action<bool>? RecordingChanged;
+    public event Action? RecordingStoppedByShortcut;
     public bool IsRecording => _recording;
     public bool IsPlaying => _playing;
+    public int RecordingStopVirtualKey { get; set; } = 0x77;
+    public uint RecordingStopModifiers { get; set; }
 
     public MacroEngine()
     {
@@ -80,6 +83,10 @@ public sealed class MacroEngine : IDisposable
     {
         if (nCode >= 0 && _playing && (w.ToInt32() == NativeMethods.WM_KEYDOWN || w.ToInt32() == NativeMethods.WM_SYSKEYDOWN) && Marshal.ReadInt32(l) == 0x1B)
             StopPlayback();
+        if (nCode >= 0 && _recording && (w.ToInt32() == NativeMethods.WM_KEYDOWN || w.ToInt32() == NativeMethods.WM_SYSKEYDOWN) && Marshal.ReadInt32(l) == RecordingStopVirtualKey && RecordingStopModifiersHeld())
+        {
+            StopRecording(); RecordingStoppedByShortcut?.Invoke(); return new IntPtr(1);
+        }
         if (nCode >= 0 && _recording)
         {
             var key = Marshal.ReadInt32(l);
@@ -87,6 +94,15 @@ public sealed class MacroEngine : IDisposable
             Add(new MacroEvent { Type = type, Key = key });
         }
         return NativeMethods.CallNextHookEx(_keyboardHook, nCode, w, l);
+    }
+    private bool RecordingStopModifiersHeld()
+    {
+        bool Down(int key) => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0;
+        if ((RecordingStopModifiers & NativeMethods.MOD_CONTROL) != 0 && !Down(0x11)) return false;
+        if ((RecordingStopModifiers & NativeMethods.MOD_ALT) != 0 && !Down(0x12)) return false;
+        if ((RecordingStopModifiers & NativeMethods.MOD_SHIFT) != 0 && !Down(0x10)) return false;
+        if ((RecordingStopModifiers & NativeMethods.MOD_WIN) != 0 && !Down(0x5B) && !Down(0x5C)) return false;
+        return true;
     }
     private IntPtr MouseCallback(int nCode, IntPtr w, IntPtr l)
     {

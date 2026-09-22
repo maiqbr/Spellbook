@@ -10,18 +10,22 @@ public partial class MainWindow : Window
 {
     private readonly MacroEngine _engine = new();
     private readonly SpellRepository _repository = new();
+    private readonly SpellbookSettings _settings;
     private readonly ObservableCollection<Spell> _spells;
     private Spell? Current => SpellsList.SelectedItem as Spell;
     private bool _loading;
     private bool _capturingHotkey;
+    private bool _capturingRecordingStop;
     private IntPtr _windowHandle;
     public MainWindow()
     {
         InitializeComponent();
+        _settings = _repository.LoadSettings(); _engine.RecordingStopVirtualKey = _settings.RecordingStopVirtualKey; _engine.RecordingStopModifiers = _settings.RecordingStopModifiers; RecordingStopBox.Text = RecordingStopHotkeyText();
         _spells = new(_repository.Load()); if (_spells.Count == 0) _spells.Add(new Spell { Name = "Primeiro feitiço" });
         SpellsList.ItemsSource = _spells; SpellsList.SelectedIndex = 0;
         _engine.EventRecorded += _ => Dispatcher.Invoke(RefreshEvents);
-        _engine.RecordingChanged += active => Dispatcher.Invoke(() => { RecordButton.Content = active ? "■  PARAR GRAVAÇÃO" : "●  GRAVAR"; StatusText.Text = active ? "GRAVANDO" : "EM ESPERA"; StatusDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#F0C878" : "#6EE0A8")); });
+        _engine.RecordingChanged += active => Dispatcher.Invoke(() => { UpdateRecordButton(active); StatusText.Text = active ? "GRAVANDO" : "EM ESPERA"; StatusDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#F0C878" : "#6EE0A8")); });
+        _engine.RecordingStoppedByShortcut += () => Dispatcher.Invoke(() => { if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); } WindowState = WindowState.Normal; Show(); Activate(); });
         SourceInitialized += (_, _) => { _windowHandle = new WindowInteropHelper(this).Handle; HwndSource.FromHwnd(_windowHandle)?.AddHook(WindowMessage); RegisterAllHotkeys(); };
         Closed += (_, _) => { UnregisterAllHotkeys(); _engine.Dispose(); };
     }
@@ -41,10 +45,10 @@ public partial class MainWindow : Window
         EventsList.ItemsSource = events.Select((x, i) => $"{i + 1:00}   +{x.DelayMs,4} ms     {Describe(x)}").ToList(); DurationText.Text = $"{events.Sum(x => x.DelayMs) / 1000d:0.0}s";
     }
     private static string Describe(MacroEvent x) => x.Type switch { MacroEventType.KeyDown or MacroEventType.KeyUp => $"{x.Type}: {(Key)x.Key}", MacroEventType.MouseWheel => $"Roda do mouse: {x.Data}", MacroEventType.Wait => "Esperar", _ => $"{x.Type}: {x.X}, {x.Y}" };
-    private void RecordButton_Click(object sender, RoutedEventArgs e)
+    private async void RecordButton_Click(object sender, RoutedEventArgs e)
     {
         if (_engine.IsRecording) { _engine.StopRecording(); if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); } }
-        else _engine.StartRecording();
+        else { WindowState = WindowState.Minimized; await Task.Delay(300); _engine.StartRecording(); }
     }
     private async void PlayButton_Click(object sender, RoutedEventArgs e) { if (_engine.IsPlaying) { _engine.StopPlayback(); PlayButton.Content = "▷  TESTAR FEITIÇO"; return; } if (Current is not null) { StatusText.Text = "EXECUTANDO"; PlayButton.Content = "■  PARAR"; await _engine.PlayAsync(Current); StatusText.Text = "EM ESPERA"; PlayButton.Content = "▷  TESTAR FEITIÇO"; } }
     private void ClearButton_Click(object sender, RoutedEventArgs e) { if (Current is null) return; Current.Events.Clear(); Persist(); RefreshEvents(); }
@@ -66,6 +70,7 @@ public partial class MainWindow : Window
     }
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (_capturingRecordingStop) { CaptureRecordingStopHotkey(e); return; }
         if (!_capturingHotkey) return;
         e.Handled = true;
         if (Current is null) { _capturingHotkey = false; return; }
@@ -75,6 +80,32 @@ public partial class MainWindow : Window
         if (key == Key.Escape) { HotkeyBox.Text = Current.Hotkey; return; }
         if (key is Key.Back or Key.Delete) { Current.Hotkey = ""; HotkeyBox.Text = ""; Persist(); return; }
         Current.Hotkey = FormatHotkey(Keyboard.Modifiers, key); HotkeyBox.Text = Current.Hotkey; Persist();
+    }
+    private void RecordingStopBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _capturingRecordingStop = true; RecordingStopBox.Text = "PRESSIONE UMA TECLA..."; RecordingStopBox.Focus(); e.Handled = true;
+    }
+    private void CaptureRecordingStopHotkey(KeyEventArgs e)
+    {
+        e.Handled = true;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return;
+        _capturingRecordingStop = false;
+        if (key == Key.Escape) { RecordingStopBox.Text = RecordingStopHotkeyText(); return; }
+        _settings.RecordingStopVirtualKey = KeyInterop.VirtualKeyFromKey(key); _settings.RecordingStopModifiers = ToNativeModifiers(Keyboard.Modifiers);
+        _engine.RecordingStopVirtualKey = _settings.RecordingStopVirtualKey; _engine.RecordingStopModifiers = _settings.RecordingStopModifiers; RecordingStopBox.Text = RecordingStopHotkeyText(); _repository.SaveSettings(_settings); UpdateRecordButton(_engine.IsRecording);
+    }
+    private string RecordingStopHotkeyText() => FormatHotkey(FromNativeModifiers(_settings.RecordingStopModifiers), KeyInterop.KeyFromVirtualKey(_settings.RecordingStopVirtualKey));
+    private void UpdateRecordButton(bool recording) => RecordButton.Content = recording ? $"■  GRAVANDO · {RecordingStopBox.Text} PARA PARAR" : $"●  GRAVAR · {RecordingStopBox.Text} PARA PARAR";
+    private static uint ToNativeModifiers(ModifierKeys modifiers) => (modifiers.HasFlag(ModifierKeys.Control) ? NativeMethods.MOD_CONTROL : 0) | (modifiers.HasFlag(ModifierKeys.Alt) ? NativeMethods.MOD_ALT : 0) | (modifiers.HasFlag(ModifierKeys.Shift) ? NativeMethods.MOD_SHIFT : 0) | (modifiers.HasFlag(ModifierKeys.Windows) ? NativeMethods.MOD_WIN : 0);
+    private static ModifierKeys FromNativeModifiers(uint modifiers)
+    {
+        var result = ModifierKeys.None;
+        if ((modifiers & NativeMethods.MOD_CONTROL) != 0) result |= ModifierKeys.Control;
+        if ((modifiers & NativeMethods.MOD_ALT) != 0) result |= ModifierKeys.Alt;
+        if ((modifiers & NativeMethods.MOD_SHIFT) != 0) result |= ModifierKeys.Shift;
+        if ((modifiers & NativeMethods.MOD_WIN) != 0) result |= ModifierKeys.Windows;
+        return result;
     }
     private static string FormatHotkey(ModifierKeys modifiers, Key key)
     {
