@@ -10,10 +10,12 @@ public sealed class MacroEngine : IDisposable
     private readonly Stopwatch _clock = new();
     private long _lastEvent;
     private bool _recording, _playing;
+    private CancellationTokenSource? _playbackCts;
     public List<MacroEvent> Recording { get; } = [];
     public event Action<MacroEvent>? EventRecorded;
     public event Action<bool>? RecordingChanged;
     public bool IsRecording => _recording;
+    public bool IsPlaying => _playing;
 
     public MacroEngine()
     {
@@ -33,18 +35,34 @@ public sealed class MacroEngine : IDisposable
     }
     public async Task PlayAsync(Spell spell, CancellationToken cancellationToken = default)
     {
-        if (_recording || _playing || spell.Events.Count == 0) return;
+        if (_recording || _playing || (spell.Events.Count == 0 && spell.Type != SpellType.AutoClicker)) return;
         _playing = true;
+        _playbackCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
+            if (spell.Type == SpellType.AutoClicker) { await PlayAutoClickerAsync(spell, _playbackCts.Token); return; }
             for (var cycle = 0; cycle < Math.Max(1, spell.Repeat); cycle++)
                 foreach (var e in spell.Events)
                 {
-                    await Task.Delay(Math.Clamp(e.DelayMs, 0, 60_000), cancellationToken);
+                    await Task.Delay(Math.Clamp(e.DelayMs, 0, 60_000), _playbackCts.Token);
                     Send(e);
                 }
         }
-        finally { _playing = false; }
+        catch (OperationCanceledException) { }
+        finally { _playbackCts?.Dispose(); _playbackCts = null; _playing = false; }
+    }
+    public void StopPlayback() => _playbackCts?.Cancel();
+    private static async Task PlayAutoClickerAsync(Spell spell, CancellationToken cancellationToken)
+    {
+        var config = spell.AutoClicker;
+        for (var i = 0; config.Unlimited || i < Math.Max(1, spell.Repeat); i++)
+        {
+            var point = new NativeMethods.POINT { x = config.X, y = config.Y };
+            if (!config.UseFixedPosition) NativeMethods.GetCursorPos(out point);
+            var (downKey, upKey) = config.Button switch { MouseButton.Right => (NativeMethods.WM_RBUTTONDOWN, NativeMethods.WM_RBUTTONUP), MouseButton.Middle => (0x0207, 0x0208), _ => (NativeMethods.WM_LBUTTONDOWN, NativeMethods.WM_LBUTTONUP) };
+            for (var click = 0; click < Math.Clamp(config.ClicksPerCycle, 1, 3); click++) { Send(new MacroEvent { Type = MacroEventType.MouseDown, X = point.x, Y = point.y, Key = downKey }); Send(new MacroEvent { Type = MacroEventType.MouseUp, X = point.x, Y = point.y, Key = upKey }); }
+            await Task.Delay(Math.Clamp(config.IntervalMs, 1, 60_000), cancellationToken);
+        }
     }
     private void Add(MacroEvent e)
     {
@@ -82,6 +100,7 @@ public sealed class MacroEngine : IDisposable
     }
     private static void Send(MacroEvent e)
     {
+        if (e.Type == MacroEventType.Wait) return;
         NativeMethods.INPUT input;
         if (e.Type is MacroEventType.KeyDown or MacroEventType.KeyUp)
             input = new() { type = NativeMethods.INPUT_KEYBOARD, U = new() { ki = new() { wVk = (ushort)e.Key, dwFlags = e.Type == MacroEventType.KeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0 } } };
@@ -89,8 +108,8 @@ public sealed class MacroEngine : IDisposable
         {
             var flags = e.Type switch
             {
-                MacroEventType.MouseDown => e.Key == NativeMethods.WM_RBUTTONDOWN ? NativeMethods.MOUSEEVENTF_RIGHTDOWN : NativeMethods.MOUSEEVENTF_LEFTDOWN,
-                MacroEventType.MouseUp => e.Key == NativeMethods.WM_RBUTTONUP ? NativeMethods.MOUSEEVENTF_RIGHTUP : NativeMethods.MOUSEEVENTF_LEFTUP,
+                MacroEventType.MouseDown => e.Key == NativeMethods.WM_RBUTTONDOWN ? NativeMethods.MOUSEEVENTF_RIGHTDOWN : e.Key == 0x0207 ? NativeMethods.MOUSEEVENTF_MIDDLEDOWN : NativeMethods.MOUSEEVENTF_LEFTDOWN,
+                MacroEventType.MouseUp => e.Key == NativeMethods.WM_RBUTTONUP ? NativeMethods.MOUSEEVENTF_RIGHTUP : e.Key == 0x0208 ? NativeMethods.MOUSEEVENTF_MIDDLEUP : NativeMethods.MOUSEEVENTF_LEFTUP,
                 MacroEventType.MouseWheel => NativeMethods.MOUSEEVENTF_WHEEL,
                 _ => NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE
             };

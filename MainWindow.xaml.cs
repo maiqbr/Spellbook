@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Interop;
+using System.Windows.Input;
 
 namespace Spellbook;
 public partial class MainWindow : Window
@@ -25,26 +26,61 @@ public partial class MainWindow : Window
     }
     private void SpellsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (Current is null) return; _loading = true; NameBox.Text = Current.Name; HotkeyBox.Text = Current.Hotkey; RepeatBox.Text = Current.Repeat.ToString(); _loading = false; RefreshEvents();
+        if (Current is null) return; _loading = true; NameBox.Text = Current.Name; HotkeyBox.Text = Current.Hotkey; RepeatBox.Text = Current.Repeat.ToString(); TypeBox.SelectedIndex = (int)Current.Type;
+        ClickButtonBox.SelectedIndex = (int)Current.AutoClicker.Button; ClickStyleBox.SelectedIndex = Math.Clamp(Current.AutoClicker.ClicksPerCycle, 1, 3) - 1; IntervalBox.Text = Current.AutoClicker.IntervalMs.ToString(); UnlimitedBox.IsChecked = Current.AutoClicker.Unlimited; FixedPositionBox.IsChecked = Current.AutoClicker.UseFixedPosition; AutoXBox.Text = Current.AutoClicker.X.ToString(); AutoYBox.Text = Current.AutoClicker.Y.ToString(); _loading = false; SetModePanels(); RefreshEvents();
     }
     private void RefreshEvents()
     {
+        if (Current?.Type == SpellType.AutoClicker)
+        {
+            var c = Current.AutoClicker; EventsList.ItemsSource = new[] { $"{(c.Unlimited ? "∞" : Current.Repeat)} ciclos · {c.ClicksPerCycle} clique(s) · a cada {c.IntervalMs} ms", $"Botão: {c.Button} · Posição: {(c.UseFixedPosition ? $"{c.X}, {c.Y}" : "cursor atual")}" };
+            DurationText.Text = c.Unlimited ? "∞" : $"{Math.Max(1, Current.Repeat) * c.IntervalMs / 1000d:0.0}s"; return;
+        }
         var events = _engine.IsRecording ? _engine.Recording : Current?.Events ?? [];
-        EventsList.ItemsSource = events.Select((x, i) => $"{i + 1:00}   +{x.DelayMs,4} ms     {Describe(x)}").ToList();
-        DurationText.Text = $"{events.Sum(x => x.DelayMs) / 1000d:0.0}s";
+        EventsList.ItemsSource = events.Select((x, i) => $"{i + 1:00}   +{x.DelayMs,4} ms     {Describe(x)}").ToList(); DurationText.Text = $"{events.Sum(x => x.DelayMs) / 1000d:0.0}s";
     }
-    private static string Describe(MacroEvent x) => x.Type switch { MacroEventType.KeyDown or MacroEventType.KeyUp => $"{x.Type}: {(System.Windows.Input.Key) x.Key}", MacroEventType.MouseWheel => $"Roda do mouse: {x.Data}", _ => $"{x.Type}: {x.X}, {x.Y}" };
+    private static string Describe(MacroEvent x) => x.Type switch { MacroEventType.KeyDown or MacroEventType.KeyUp => $"{x.Type}: {(Key)x.Key}", MacroEventType.MouseWheel => $"Roda do mouse: {x.Data}", MacroEventType.Wait => "Esperar", _ => $"{x.Type}: {x.X}, {x.Y}" };
     private void RecordButton_Click(object sender, RoutedEventArgs e)
     {
         if (_engine.IsRecording) { _engine.StopRecording(); if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); } }
         else _engine.StartRecording();
     }
-    private async void PlayButton_Click(object sender, RoutedEventArgs e) { if (Current is not null) { StatusText.Text = "CONJURANDO"; await _engine.PlayAsync(Current); StatusText.Text = "PRONTO"; } }
+    private async void PlayButton_Click(object sender, RoutedEventArgs e) { if (_engine.IsPlaying) { _engine.StopPlayback(); PlayButton.Content = "▷  TESTAR FEITIÇO"; return; } if (Current is not null) { StatusText.Text = "CONJURANDO"; PlayButton.Content = "■  PARAR"; await _engine.PlayAsync(Current); StatusText.Text = "PRONTO"; PlayButton.Content = "▷  TESTAR FEITIÇO"; } }
     private void ClearButton_Click(object sender, RoutedEventArgs e) { if (Current is null) return; Current.Events.Clear(); Persist(); RefreshEvents(); }
     private void NewSpell_Click(object sender, RoutedEventArgs e) { var spell = new Spell { Name = $"Feitiço {_spells.Count + 1}" }; _spells.Add(spell); SpellsList.SelectedItem = spell; Persist(); }
     private void NameBox_TextChanged(object sender, TextChangedEventArgs e) { if (!_loading && Current is not null) { Current.Name = string.IsNullOrWhiteSpace(NameBox.Text) ? "Feitiço sem nome" : NameBox.Text; SpellsList.Items.Refresh(); Persist(); } }
     private void DetailsChanged(object sender, TextChangedEventArgs e) { if (!_loading && Current is not null) { Current.Hotkey = HotkeyBox.Text; Current.Repeat = int.TryParse(RepeatBox.Text, out var repeat) ? Math.Clamp(repeat, 1, 99) : 1; Persist(); } }
     private void Persist() { _repository.Save(_spells); RegisterAllHotkeys(); SaveText.Text = "SALVO AGORA"; }
+    private void TypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (!_loading && Current is not null) { Current.Type = (SpellType)Math.Max(0, TypeBox.SelectedIndex); Persist(); } SetModePanels(); RefreshEvents(); }
+    private void SetModePanels()
+    {
+        var type = Current?.Type ?? SpellType.Recorded;
+        AutoClickerPanel.Visibility = type == SpellType.AutoClicker ? Visibility.Visible : Visibility.Collapsed;
+        ManualPanel.Visibility = type == SpellType.Manual ? Visibility.Visible : Visibility.Collapsed;
+        RecordButton.IsEnabled = type != SpellType.AutoClicker;
+    }
+    private void AutoClickerChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading || Current is null) return;
+        var c = Current.AutoClicker; c.Button = (MouseButton)Math.Max(0, ClickButtonBox.SelectedIndex); c.ClicksPerCycle = Math.Max(1, ClickStyleBox.SelectedIndex + 1); c.IntervalMs = ReadInt(IntervalBox.Text, 100, 1, 60_000); c.Unlimited = UnlimitedBox.IsChecked == true; c.UseFixedPosition = FixedPositionBox.IsChecked == true; c.X = ReadInt(AutoXBox.Text, 0, 0, 100_000); c.Y = ReadInt(AutoYBox.Text, 0, 0, 100_000); Persist(); RefreshEvents();
+    }
+    private void AddManualAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (Current is null) return;
+        var delay = ReadInt(ManualDelayBox.Text, 100, 0, 60_000); var x = ReadInt(ManualXBox.Text, 0, 0, 100_000); var y = ReadInt(ManualYBox.Text, 0, 0, 100_000); var value = ManualValueBox.Text.Trim(); var type = ManualTypeBox.SelectedIndex;
+        var events = Current.Events;
+        if (type is 0 or 1) { if (!Enum.TryParse<Key>(value, true, out var key)) { MessageBox.Show("Informe uma tecla válida, por exemplo A, Enter ou F1.", "Spellbook"); return; } events.Add(new MacroEvent { Type = type == 0 ? MacroEventType.KeyDown : MacroEventType.KeyUp, Key = KeyInterop.VirtualKeyFromKey(key), DelayMs = delay }); }
+        else if (type is 2 or 3) { var isRight = type == 3; events.Add(new MacroEvent { Type = MacroEventType.MouseDown, X = x, Y = y, Key = isRight ? NativeMethods.WM_RBUTTONDOWN : NativeMethods.WM_LBUTTONDOWN, DelayMs = delay }); events.Add(new MacroEvent { Type = MacroEventType.MouseUp, X = x, Y = y, Key = isRight ? NativeMethods.WM_RBUTTONUP : NativeMethods.WM_LBUTTONUP, DelayMs = 20 }); }
+        else if (type == 4) events.Add(new MacroEvent { Type = MacroEventType.MouseMove, X = x, Y = y, DelayMs = delay });
+        else if (type == 5) events.Add(new MacroEvent { Type = MacroEventType.MouseWheel, Data = ReadInt(value, 120, -12000, 12000), DelayMs = delay });
+        else events.Add(new MacroEvent { Type = MacroEventType.Wait, DelayMs = delay });
+        Persist(); RefreshEvents();
+    }
+    private static int ReadInt(string value, int fallback, int min, int max) => int.TryParse(value, out var parsed) ? Math.Clamp(parsed, min, max) : fallback;
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); }
+    private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void Maximize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
     private void RegisterAllHotkeys()
     {
         if (_windowHandle == IntPtr.Zero) return;
@@ -54,7 +90,7 @@ public partial class MainWindow : Window
     private void UnregisterAllHotkeys() { if (_windowHandle != IntPtr.Zero) for (var i = 1; i <= _spells.Count; i++) NativeMethods.UnregisterHotKey(_windowHandle, i); }
     private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message == NativeMethods.WM_HOTKEY && wParam.ToInt32() is var id && id > 0 && id <= _spells.Count) { _ = _engine.PlayAsync(_spells[id - 1]); handled = true; }
+        if (message == NativeMethods.WM_HOTKEY && wParam.ToInt32() is var id && id > 0 && id <= _spells.Count) { if (_engine.IsPlaying) _engine.StopPlayback(); else _ = _engine.PlayAsync(_spells[id - 1]); handled = true; }
         return IntPtr.Zero;
     }
     private static bool TryParseHotkey(string value, out uint modifiers, out uint key)

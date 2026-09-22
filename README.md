@@ -7,8 +7,10 @@
 ## Recursos
 
 - Grava eventos de teclado, cliques, movimentos e rolagem do mouse.
+- Cria sequências manualmente, com teclas, cliques, movimentos, rolagem e pausas configuráveis.
 - Reproduz sequências com os intervalos originais entre as ações.
-- Permite repetir uma sequência e definir um atalho global por feitiço.
+- Inclui autoclicker com botão esquerdo, direito ou do meio; clique simples, duplo ou triplo; posição dinâmica ou fixa; intervalo, quantidade e repetição contínua configuráveis.
+- Permite repetir uma sequência e definir um atalho global para iniciar ou parar a automação.
 - Mantém as automações no computador do usuário; não requer conta ou conexão com a internet para funcionar.
 - Interface inspirada em fantasia sombria, com tons de café, ouro e violeta.
 
@@ -21,10 +23,9 @@ Para executar a versão publicada, não é necessário instalar o .NET: o pacote
 ## Uso
 
 1. Abra o Spellbook e crie um novo feitiço.
-2. Clique em **Gravar**.
-3. Execute a sequência desejada fora da janela do aplicativo.
-4. Retorne ao Spellbook e clique em **Parar gravação**.
-5. Opcionalmente, informe um atalho como `Ctrl+Alt+K` e use **Testar** para conferir a sequência.
+2. Escolha **Gravado**, **Autoclicker** ou **Manual**.
+3. Para autoclicker, defina o botão, velocidade, posição e quantidade desejada. Para Manual, adicione cada ação no construtor.
+4. Opcionalmente, informe um atalho como `Ctrl+Alt+K` e use **Testar** para conferir a sequência.
 
 ## Desenvolvimento
 
