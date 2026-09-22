@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<Spell> _spells;
     private Spell? Current => SpellsList.SelectedItem as Spell;
     private bool _loading;
+    private bool _capturingHotkey;
     private IntPtr _windowHandle;
     public MainWindow()
     {
@@ -20,7 +21,7 @@ public partial class MainWindow : Window
         _spells = new(_repository.Load()); if (_spells.Count == 0) _spells.Add(new Spell { Name = "Primeiro feitiço" });
         SpellsList.ItemsSource = _spells; SpellsList.SelectedIndex = 0;
         _engine.EventRecorded += _ => Dispatcher.Invoke(RefreshEvents);
-        _engine.RecordingChanged += active => Dispatcher.Invoke(() => { RecordButton.Content = active ? "■  PARAR GRAVAÇÃO" : "●  GRAVAR"; StatusText.Text = active ? "GRAVANDO" : "PRONTO"; StatusDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#F0C878" : "#6EE0A8")); });
+        _engine.RecordingChanged += active => Dispatcher.Invoke(() => { RecordButton.Content = active ? "■  PARAR GRAVAÇÃO" : "●  GRAVAR"; StatusText.Text = active ? "GRAVANDO" : "EM ESPERA"; StatusDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#F0C878" : "#6EE0A8")); });
         SourceInitialized += (_, _) => { _windowHandle = new WindowInteropHelper(this).Handle; HwndSource.FromHwnd(_windowHandle)?.AddHook(WindowMessage); RegisterAllHotkeys(); };
         Closed += (_, _) => { UnregisterAllHotkeys(); _engine.Dispose(); };
     }
@@ -45,24 +46,58 @@ public partial class MainWindow : Window
         if (_engine.IsRecording) { _engine.StopRecording(); if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); } }
         else _engine.StartRecording();
     }
-    private async void PlayButton_Click(object sender, RoutedEventArgs e) { if (_engine.IsPlaying) { _engine.StopPlayback(); PlayButton.Content = "▷  TESTAR FEITIÇO"; return; } if (Current is not null) { StatusText.Text = "CONJURANDO"; PlayButton.Content = "■  PARAR"; await _engine.PlayAsync(Current); StatusText.Text = "PRONTO"; PlayButton.Content = "▷  TESTAR FEITIÇO"; } }
+    private async void PlayButton_Click(object sender, RoutedEventArgs e) { if (_engine.IsPlaying) { _engine.StopPlayback(); PlayButton.Content = "▷  TESTAR FEITIÇO"; return; } if (Current is not null) { StatusText.Text = "EXECUTANDO"; PlayButton.Content = "■  PARAR"; await _engine.PlayAsync(Current); StatusText.Text = "EM ESPERA"; PlayButton.Content = "▷  TESTAR FEITIÇO"; } }
     private void ClearButton_Click(object sender, RoutedEventArgs e) { if (Current is null) return; Current.Events.Clear(); Persist(); RefreshEvents(); }
     private void NewSpell_Click(object sender, RoutedEventArgs e) { var spell = new Spell { Name = $"Feitiço {_spells.Count + 1}" }; _spells.Add(spell); SpellsList.SelectedItem = spell; Persist(); }
+    private void DeleteSpell_Click(object sender, RoutedEventArgs e)
+    {
+        if (Current is null) return;
+        if (MessageBox.Show($"Excluir o feitiço “{Current.Name}”? Esta ação não pode ser desfeita.", "Excluir feitiço", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        var index = SpellsList.SelectedIndex; _spells.Remove(Current); Persist();
+        if (_spells.Count > 0) SpellsList.SelectedIndex = Math.Min(index, _spells.Count - 1);
+        else { _loading = true; NameBox.Text = ""; HotkeyBox.Text = ""; RepeatBox.Text = "1"; TypeBox.SelectedIndex = -1; _loading = false; EventsList.ItemsSource = null; DurationText.Text = "0s"; }
+    }
     private void NameBox_TextChanged(object sender, TextChangedEventArgs e) { if (!_loading && Current is not null) { Current.Name = string.IsNullOrWhiteSpace(NameBox.Text) ? "Feitiço sem nome" : NameBox.Text; SpellsList.Items.Refresh(); Persist(); } }
-    private void DetailsChanged(object sender, TextChangedEventArgs e) { if (!_loading && Current is not null) { Current.Hotkey = HotkeyBox.Text; Current.Repeat = int.TryParse(RepeatBox.Text, out var repeat) ? Math.Clamp(repeat, 1, 99) : 1; Persist(); } }
-    private void Persist() { _repository.Save(_spells); RegisterAllHotkeys(); SaveText.Text = "SALVO AGORA"; }
+    private void DetailsChanged(object sender, TextChangedEventArgs e) { if (!_loading && Current is not null) { Current.Repeat = int.TryParse(RepeatBox.Text, out var repeat) ? Math.Clamp(repeat, 1, 99) : 1; Persist(); } }
+    private void HotkeyBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Current is null) return;
+        _capturingHotkey = true; HotkeyBox.Text = "PRESSIONE UMA TECLA..."; HotkeyBox.Focus(); e.Handled = true;
+    }
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_capturingHotkey) return;
+        e.Handled = true;
+        if (Current is null) { _capturingHotkey = false; return; }
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return;
+        _capturingHotkey = false;
+        if (key == Key.Escape) { HotkeyBox.Text = Current.Hotkey; return; }
+        if (key is Key.Back or Key.Delete) { Current.Hotkey = ""; HotkeyBox.Text = ""; Persist(); return; }
+        Current.Hotkey = FormatHotkey(Keyboard.Modifiers, key); HotkeyBox.Text = Current.Hotkey; Persist();
+    }
+    private static string FormatHotkey(ModifierKeys modifiers, Key key)
+    {
+        var parts = new List<string>();
+        if (modifiers.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+        if (modifiers.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+        if (modifiers.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+        if (modifiers.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
+        parts.Add(key.ToString()); return string.Join('+', parts);
+    }
+    private void Persist() { _repository.Save(_spells); RegisterAllHotkeys(); }
     private void TypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (!_loading && Current is not null) { Current.Type = (SpellType)Math.Max(0, TypeBox.SelectedIndex); Persist(); } SetModePanels(); RefreshEvents(); }
     private void SetModePanels()
     {
         var type = Current?.Type ?? SpellType.Recorded;
         AutoClickerPanel.Visibility = type == SpellType.AutoClicker ? Visibility.Visible : Visibility.Collapsed;
         ManualPanel.Visibility = type == SpellType.Manual ? Visibility.Visible : Visibility.Collapsed;
-        RecordButton.IsEnabled = type != SpellType.AutoClicker;
+        RecordingPanel.Visibility = type == SpellType.Recorded ? Visibility.Visible : Visibility.Collapsed;
     }
     private void AutoClickerChanged(object sender, RoutedEventArgs e)
     {
         if (_loading || Current is null) return;
-        var c = Current.AutoClicker; c.Button = (MouseButton)Math.Max(0, ClickButtonBox.SelectedIndex); c.ClicksPerCycle = Math.Max(1, ClickStyleBox.SelectedIndex + 1); c.IntervalMs = ReadInt(IntervalBox.Text, 100, 1, 60_000); c.Unlimited = UnlimitedBox.IsChecked == true; c.UseFixedPosition = FixedPositionBox.IsChecked == true; c.X = ReadInt(AutoXBox.Text, 0, 0, 100_000); c.Y = ReadInt(AutoYBox.Text, 0, 0, 100_000); Persist(); RefreshEvents();
+        var c = Current.AutoClicker; c.Button = (MouseButton)Math.Max(0, ClickButtonBox.SelectedIndex); c.ClicksPerCycle = Math.Max(1, ClickStyleBox.SelectedIndex + 1); c.IntervalMs = ReadInt(IntervalBox.Text, 100, 10, 60_000); c.Unlimited = UnlimitedBox.IsChecked == true; c.UseFixedPosition = FixedPositionBox.IsChecked == true; c.X = ReadInt(AutoXBox.Text, 0, 0, 100_000); c.Y = ReadInt(AutoYBox.Text, 0, 0, 100_000); Persist(); RefreshEvents();
     }
     private void AddManualAction_Click(object sender, RoutedEventArgs e)
     {
@@ -97,9 +132,8 @@ public partial class MainWindow : Window
     {
         modifiers = 0; key = 0;
         var parts = value.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 2) return false;
+        if (parts.Length == 0) return false;
         foreach (var part in parts[..^1]) modifiers |= part.ToUpperInvariant() switch { "CTRL" or "CONTROL" => NativeMethods.MOD_CONTROL, "ALT" => NativeMethods.MOD_ALT, "SHIFT" => NativeMethods.MOD_SHIFT, "WIN" or "WINDOWS" => NativeMethods.MOD_WIN, _ => 0 };
-        if (modifiers == 0) return false;
         return Enum.TryParse<System.Windows.Input.Key>(parts[^1], true, out var parsed) && (key = (uint)System.Windows.Input.KeyInterop.VirtualKeyFromKey(parsed)) > 0;
     }
 }

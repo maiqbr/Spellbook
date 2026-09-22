@@ -57,11 +57,16 @@ public sealed class MacroEngine : IDisposable
         var config = spell.AutoClicker;
         for (var i = 0; config.Unlimited || i < Math.Max(1, spell.Repeat); i++)
         {
+            var cycleClock = Stopwatch.StartNew();
+            var interval = Math.Clamp(config.IntervalMs, 10, 60_000);
             var point = new NativeMethods.POINT { x = config.X, y = config.Y };
             if (!config.UseFixedPosition) NativeMethods.GetCursorPos(out point);
             var (downKey, upKey) = config.Button switch { MouseButton.Right => (NativeMethods.WM_RBUTTONDOWN, NativeMethods.WM_RBUTTONUP), MouseButton.Middle => (0x0207, 0x0208), _ => (NativeMethods.WM_LBUTTONDOWN, NativeMethods.WM_LBUTTONUP) };
-            for (var click = 0; click < Math.Clamp(config.ClicksPerCycle, 1, 3); click++) { Send(new MacroEvent { Type = MacroEventType.MouseDown, X = point.x, Y = point.y, Key = downKey }); Send(new MacroEvent { Type = MacroEventType.MouseUp, X = point.x, Y = point.y, Key = upKey }); }
-            await Task.Delay(Math.Clamp(config.IntervalMs, 1, 60_000), cancellationToken);
+            var clicks = Math.Clamp(config.ClicksPerCycle, 1, 3);
+            var hold = Math.Clamp(interval / (clicks * 3), 1, 5);
+            for (var click = 0; click < clicks; click++) { Send(new MacroEvent { Type = MacroEventType.MouseDown, X = point.x, Y = point.y, Key = downKey }); await Task.Delay(hold, cancellationToken); Send(new MacroEvent { Type = MacroEventType.MouseUp, X = point.x, Y = point.y, Key = upKey }); }
+            var remaining = Math.Max(1, interval - (int)cycleClock.ElapsedMilliseconds);
+            await Task.Delay(remaining, cancellationToken);
         }
     }
     private void Add(MacroEvent e)
@@ -73,6 +78,8 @@ public sealed class MacroEngine : IDisposable
     }
     private IntPtr KeyboardCallback(int nCode, IntPtr w, IntPtr l)
     {
+        if (nCode >= 0 && _playing && (w.ToInt32() == NativeMethods.WM_KEYDOWN || w.ToInt32() == NativeMethods.WM_SYSKEYDOWN) && Marshal.ReadInt32(l) == 0x1B)
+            StopPlayback();
         if (nCode >= 0 && _recording)
         {
             var key = Marshal.ReadInt32(l);
