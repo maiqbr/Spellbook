@@ -48,4 +48,6 @@ Automação pode executar cliques e teclas em qualquer aplicativo ativo. Revise 
 
 ## Licença
 
-Este projeto ainda não possui uma licença. Antes de receber contribuições ou redistribuições, adicione uma licença apropriada ao repositório.
+Copyright © 2026 Maiq.
+
+Este projeto é licenciado sob a [GNU General Public License v3.0 ou posterior](LICENSE) (GPL-3.0-or-later). Isso permite usar, estudar, modificar e redistribuir o Spellbook, inclusive comercialmente, desde que obras distribuídas derivadas também sejam disponibilizadas sob a mesma licença, com o código-fonte correspondente.
