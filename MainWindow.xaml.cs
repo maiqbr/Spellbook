@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private bool _loading;
     private bool _capturingHotkey;
     private bool _capturingRecordingStop;
+    private RecordingOverlay? _recordingOverlay;
     private IntPtr _windowHandle;
     public MainWindow()
     {
@@ -25,7 +26,7 @@ public partial class MainWindow : Window
         SpellsList.ItemsSource = _spells; SpellsList.SelectedIndex = 0;
         _engine.EventRecorded += _ => Dispatcher.Invoke(RefreshEvents);
         _engine.RecordingChanged += active => Dispatcher.Invoke(() => { UpdateRecordButton(active); StatusText.Text = active ? "GRAVANDO" : "EM ESPERA"; StatusDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#F0C878" : "#6EE0A8")); });
-        _engine.RecordingStoppedByShortcut += () => Dispatcher.Invoke(() => { if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); } WindowState = WindowState.Normal; Show(); Activate(); });
+        _engine.RecordingStoppedByShortcut += () => Dispatcher.Invoke(FinishRecordingAndRestore);
         SourceInitialized += (_, _) => { _windowHandle = new WindowInteropHelper(this).Handle; HwndSource.FromHwnd(_windowHandle)?.AddHook(WindowMessage); RegisterAllHotkeys(); };
         Closed += (_, _) => { UnregisterAllHotkeys(); _engine.Dispose(); };
     }
@@ -47,8 +48,18 @@ public partial class MainWindow : Window
     private static string Describe(MacroEvent x) => x.Type switch { MacroEventType.KeyDown or MacroEventType.KeyUp => $"{x.Type}: {(Key)x.Key}", MacroEventType.MouseWheel => $"Roda do mouse: {x.Data}", MacroEventType.Wait => "Esperar", _ => $"{x.Type}: {x.X}, {x.Y}" };
     private async void RecordButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_engine.IsRecording) { _engine.StopRecording(); if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); } }
-        else { WindowState = WindowState.Minimized; await Task.Delay(300); _engine.StartRecording(); }
+        if (_engine.IsRecording) { _engine.StopRecording(); FinishRecordingAndRestore(); }
+        else
+        {
+            _recordingOverlay?.Close(); _recordingOverlay = new RecordingOverlay(); _recordingOverlay.Show(); WindowState = WindowState.Minimized;
+            for (var second = 3; second >= 1; second--) { _recordingOverlay.ShowCountdown(second); await Task.Delay(1000); }
+            _recordingOverlay.ShowRecording(RecordingStopBox.Text); _engine.StartRecording();
+        }
+    }
+    private void FinishRecordingAndRestore()
+    {
+        if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); }
+        _recordingOverlay?.Close(); _recordingOverlay = null; WindowState = WindowState.Normal; Show(); Activate();
     }
     private async void PlayButton_Click(object sender, RoutedEventArgs e) { if (_engine.IsPlaying) { _engine.StopPlayback(); PlayButton.Content = "▷  TESTAR FEITIÇO"; return; } if (Current is not null) { StatusText.Text = "EXECUTANDO"; PlayButton.Content = "■  PARAR"; await _engine.PlayAsync(Current); StatusText.Text = "EM ESPERA"; PlayButton.Content = "▷  TESTAR FEITIÇO"; } }
     private void ClearButton_Click(object sender, RoutedEventArgs e) { if (Current is null) return; Current.Events.Clear(); Persist(); RefreshEvents(); }
