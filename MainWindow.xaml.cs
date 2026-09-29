@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Interop;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace Spellbook;
 public partial class MainWindow : Window
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
     private bool _loading;
     private bool _capturingHotkey;
     private bool _capturingRecordingStop;
+    private bool _recordingRefreshScheduled;
     private RecordingOverlay? _recordingOverlay;
     private IntPtr _windowHandle;
     public MainWindow()
@@ -24,7 +26,11 @@ public partial class MainWindow : Window
         _settings = _repository.LoadSettings(); _engine.RecordingStopVirtualKey = _settings.RecordingStopVirtualKey; _engine.RecordingStopModifiers = _settings.RecordingStopModifiers; RecordingStopBox.Text = RecordingStopHotkeyText();
         _spells = new(_repository.Load()); if (_spells.Count == 0) _spells.Add(new Spell { Name = "Primeiro feitiço" });
         SpellsList.ItemsSource = _spells; SpellsList.SelectedIndex = 0;
-        _engine.EventRecorded += _ => Dispatcher.Invoke(RefreshEvents);
+        // Low-level mouse hooks must return immediately. Updating the full event
+        // list for every pixel of mouse movement delayed recording itself and made
+        // the saved timing inaccurate. Keep the preview responsive, but coalesce
+        // refreshes into idle UI work.
+        _engine.EventRecorded += _ => ScheduleRecordingRefresh();
         _engine.RecordingChanged += active => Dispatcher.Invoke(() => { UpdateRecordButton(active); StatusText.Text = active ? "GRAVANDO" : "EM ESPERA"; StatusDot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(active ? "#F0C878" : "#6EE0A8")); });
         _engine.RecordingStoppedByShortcut += () => Dispatcher.Invoke(FinishRecordingAndRestore);
         SourceInitialized += (_, _) => { _windowHandle = new WindowInteropHelper(this).Handle; HwndSource.FromHwnd(_windowHandle)?.AddHook(WindowMessage); RegisterAllHotkeys(); };
@@ -52,7 +58,7 @@ public partial class MainWindow : Window
         else
         {
             _recordingOverlay?.Close(); _recordingOverlay = new RecordingOverlay(); _recordingOverlay.Show(); WindowState = WindowState.Minimized;
-            for (var second = 3; second >= 1; second--) { _recordingOverlay.ShowCountdown(second); await Task.Delay(1000); }
+            for (var second = 5; second >= 1; second--) { _recordingOverlay.ShowCountdown(second); await Task.Delay(1000); }
             _recordingOverlay.ShowRecording(RecordingStopBox.Text); _engine.StartRecording();
         }
     }
@@ -60,6 +66,12 @@ public partial class MainWindow : Window
     {
         if (Current is not null) { Current.Events = [.. _engine.Recording]; Persist(); RefreshEvents(); }
         _recordingOverlay?.Close(); _recordingOverlay = null; WindowState = WindowState.Normal; Show(); Activate();
+    }
+    private void ScheduleRecordingRefresh()
+    {
+        if (_recordingRefreshScheduled) return;
+        _recordingRefreshScheduled = true;
+        Dispatcher.BeginInvoke(() => { _recordingRefreshScheduled = false; RefreshEvents(); }, DispatcherPriority.Background);
     }
     private async void PlayButton_Click(object sender, RoutedEventArgs e) { if (_engine.IsPlaying) { _engine.StopPlayback(); PlayButton.Content = "▷  TESTAR FEITIÇO"; return; } if (Current is not null) { StatusText.Text = "EXECUTANDO"; PlayButton.Content = "■  PARAR"; await _engine.PlayAsync(Current); StatusText.Text = "EM ESPERA"; PlayButton.Content = "▷  TESTAR FEITIÇO"; } }
     private void ClearButton_Click(object sender, RoutedEventArgs e) { if (Current is null) return; Current.Events.Clear(); Persist(); RefreshEvents(); }

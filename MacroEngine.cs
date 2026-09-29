@@ -45,11 +45,21 @@ public sealed class MacroEngine : IDisposable
         {
             if (spell.Type == SpellType.AutoClicker) { await PlayAutoClickerAsync(spell, _playbackCts.Token); return; }
             for (var cycle = 0; cycle < Math.Max(1, spell.Repeat); cycle++)
+            {
+                // Use one clock for the entire cycle. Awaiting each individual
+                // delay lets scheduler overhead accumulate on recordings with many
+                // mouse-move events, making the replay visibly slower than recorded.
+                var cycleClock = Stopwatch.StartNew();
+                long targetElapsedMs = 0;
                 foreach (var e in spell.Events)
                 {
-                    await Task.Delay(Math.Clamp(e.DelayMs, 0, 60_000), _playbackCts.Token);
+                    targetElapsedMs += Math.Clamp(e.DelayMs, 0, 60_000);
+                    var remaining = targetElapsedMs - cycleClock.ElapsedMilliseconds;
+                    if (remaining > 0)
+                        await Task.Delay((int)Math.Min(remaining, 60_000), _playbackCts.Token);
                     Send(e);
                 }
+            }
         }
         catch (OperationCanceledException) { }
         finally { _playbackCts?.Dispose(); _playbackCts = null; _playing = false; }
