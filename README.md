@@ -1,18 +1,19 @@
 # Spellbook
 
-**Spellbook** é um aplicativo Windows para gravar e reproduzir automações de teclado e mouse. As sequências são organizadas como *feitiços* e podem ser acionadas por atalhos globais, por exemplo `Ctrl+Alt+K`.
+**Spellbook** é um utilitário Windows discreto na bandeja do sistema para duas tarefas simples: autoclick infinito e pequenos movimentos periódicos do mouse para manter o computador ativo.
 
 ![Logo do Spellbook](Assets/spellbook-logo.png)
 
 ## Recursos
 
-- Grava eventos de teclado, cliques, movimentos e rolagem do mouse.
-- Cria sequências manualmente, com teclas, cliques, movimentos, rolagem e pausas configuráveis.
-- Reproduz sequências com os intervalos originais entre as ações.
-- Inclui autoclicker com botão esquerdo, direito ou do meio; clique simples, duplo ou triplo; posição dinâmica ou fixa; intervalo, quantidade e repetição contínua configuráveis.
-- Permite repetir uma sequência e definir um atalho global para iniciar ou parar a automação.
-- Mantém as automações no computador do usuário; não requer conta ou conexão com a internet para funcionar.
-- Interface inspirada em fantasia sombria, com tons de café, ouro e violeta.
+- Não abre janela: fica somente no ícone da bandeja do sistema.
+- Autoclicker infinito com botão esquerdo, direito ou do meio.
+- Intervalo entre cliques por atalhos de menu ou valor personalizado, de 1 ms a 60 segundos.
+- Modo **Manter ativo**, que move o mouse um pixel e retorna à posição original no intervalo escolhido.
+- Todas as opções ficam no menu de clique com o botão direito do ícone.
+- Opção para iniciar o Spellbook automaticamente junto com o Windows.
+- Atalho global configurável para iniciar ou parar o autoclicker, mesmo com o menu fechado.
+- Configurações salvas apenas neste computador; sem conta e sem conexão com a internet.
 
 ## Requisitos
 
@@ -20,12 +21,19 @@
 
 Para executar a versão publicada, não é necessário instalar o .NET: o pacote de Release é autocontido.
 
+## Instalação
+
+Prefira baixar `Spellbook-Setup-vX.Y.Z-win-x64.exe` na página de Releases. O instalador cria o atalho no Menu Iniciar e pode criar um atalho na área de trabalho. O ZIP continua disponível como alternativa portátil.
+
 ## Uso
 
-1. Abra o Spellbook e crie um novo feitiço.
-2. Escolha **Gravado**, **Autoclicker** ou **Manual**.
-3. Para autoclicker, defina o botão, velocidade, posição e quantidade desejada. Para Manual, adicione cada ação no construtor.
-4. Opcionalmente, informe um atalho como `Ctrl+Alt+K` e use **Testar** para conferir a sequência.
+1. Abra o Spellbook. O ícone do grimório aparecerá na área de notificação do Windows; talvez seja necessário expandir a seta `^` ao lado do relógio.
+2. Clique com o botão direito no ícone para abrir o menu.
+3. Em **Autoclicker infinito**, escolha o botão, o intervalo e **Iniciar autoclicker infinito**. Ele continua clicando até você escolher a opção de parar.
+4. Em **Manter ativo**, escolha a frequência e **Ativar micro movimentos**.
+5. Marque **Iniciar com o Windows** se quiser que o Spellbook seja aberto automaticamente no próximo login.
+6. Em **Atalho global do autoclicker**, clique no campo e pressione a combinação desejada; `F6` é o padrão.
+7. Use as mesmas opções para interromper cada função ou escolha **Sair do Spellbook** para fechar o aplicativo.
 
 ## Desenvolvimento
 
@@ -41,11 +49,11 @@ dotnet run
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o .\publish\win-x64
 ```
 
-O executável gerado fica em `publish\win-x64\Spellbook.exe`. Para distribuir, compacte o conteúdo dessa pasta e anexe o `.zip` a uma [GitHub Release](https://docs.github.com/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
+O executável gerado fica em `publish\win-x64\Spellbook.exe`. Para distribuir, compacte o executável em um `.zip` ou compile `Spellbook.iss` com o Inno Setup para gerar o instalador e anexe os arquivos a uma [GitHub Release](https://docs.github.com/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
 
 ## Uso responsável
 
-Automação pode executar cliques e teclas em qualquer aplicativo ativo. Revise cada sequência antes de usá-la e respeite as regras dos serviços, jogos e plataformas envolvidos.
+Use automação apenas onde ela for permitida. Alguns serviços, jogos e plataformas podem restringir ou detectar cliques automáticos e movimentos simulados.
 
 ## Licença
 
